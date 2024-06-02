@@ -1,1 +1,1 @@
-Abs includes declarative specification, and Res includes requirement specification.
+Abs includes declarative specification, and Req includes requirement specification.
