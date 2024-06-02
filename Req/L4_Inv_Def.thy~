@@ -1,0 +1,393 @@
+theory L4_Inv_Def
+  imports L4_Machine
+begin
+
+(*2*)
+section\<open>Current\<close>
+definition Inv_Current_Thread_In_Active::"State \<Rightarrow> bool" where
+"Inv_Current_Thread_In_Active s \<equiv>
+    (current_thread s = idle \<or> current_thread s \<in> active_threads s)"
+
+definition Inv_Current_Space_IsNot_None::"State \<Rightarrow> bool" where
+"Inv_Current_Space_IsNot_None s \<equiv> 
+  (thread_space s (current_thread s) \<noteq> None)"
+
+definition Inv_Current::"State \<Rightarrow> bool" where
+"Inv_Current s \<equiv> (Inv_Current_Thread_In_Active s \<and> Inv_Current_Space_IsNot_None s)"
+
+(*10*)
+section\<open>Space\<close>
+definition Inv_Space_HasNot_Loop :: "State \<Rightarrow> bool" where
+"Inv_Space_HasNot_Loop s \<equiv> (\<forall>sp v1. (\<nexists>v2. s \<turnstile> (Virtual sp v1) \<leadsto>\<^sup>+ (Virtual sp v2)))"
+
+definition Inv_Space_Valid_Has_Real:: "State \<Rightarrow> bool" where
+"Inv_Space_Valid_Has_Real s \<equiv> (\<forall>x. (s \<turnstile> x \<longleftrightarrow> (\<exists>r. s \<turnstile> x \<leadsto>\<^sup>* (Real r))))"
+
+definition Inv_Space_Perms_Subset::"State \<Rightarrow> bool" where
+"Inv_Space_Perms_Subset s \<equiv>
+  (\<forall>sp1 sp2 v1 v2. s \<turnstile> (Virtual sp1 v1) \<leadsto>\<^sup>1 (Virtual sp2 v2) \<longrightarrow> 
+        get_perms s sp1 v1 \<subseteq> get_perms s sp2 v2)"
+
+definition Inv_Space_Valid_In_Spaces::"State \<Rightarrow> bool" where
+"Inv_Space_Valid_In_Spaces s \<equiv> (\<forall>sp v. s \<turnstile> (Virtual sp v) \<longrightarrow> sp \<in> spaces s)"
+
+lemma Inv_Space_Valid_In_Spaces_lemma:
+  assumes "s \<turnstile> (Virtual sp v)"
+  shows "sp \<in> spaces s"
+proof-
+  have h1:"\<exists>m. space_mapping s sp = Some m" 
+    using assms valid_page_def direct_path_def by auto
+  then show ?thesis unfolding spaces_def by auto
+qed
+
+definition Inv_Space_Father_Is_Unique::"State \<Rightarrow> bool" where
+"Inv_Space_Father_Is_Unique s \<equiv> (\<forall>x y1 y2. s \<turnstile> x \<leadsto>\<^sup>1 y1 \<and> s \<turnstile> x \<leadsto>\<^sup>1 y2 \<longrightarrow> y1 = y2)"
+
+definition Inv_Space_Path_Is_Unique::"State \<Rightarrow> bool" where
+"Inv_Space_Path_Is_Unique s \<equiv> 
+ (\<forall>sp v_page r1 r2. (s \<turnstile> (Virtual sp v_page) \<leadsto>\<^sup>+ (Real r1) \<and>
+                    (s \<turnstile> (Virtual sp v_page) \<leadsto>\<^sup>+ (Real r2)) \<longrightarrow> r1 = r2))"
+
+lemma Space_Father_Is_Unique:"s \<turnstile> x \<leadsto>\<^sup>1 y1 \<and> s \<turnstile> x \<leadsto>\<^sup>1 y2 \<longrightarrow> y1 = y2"
+  using direct_path_def
+  by auto
+
+lemma YIsValid:"Inv_Space_Valid_Has_Real s \<Longrightarrow> s \<turnstile> x \<leadsto>\<^sup>1 y \<longrightarrow> s \<turnstile> y"
+  unfolding Inv_Space_Valid_Has_Real_def
+proof-
+  assume a1:"\<forall>x. s\<turnstile>x = (\<exists>r. s\<turnstile>x\<leadsto>\<^sup>*(Real r))"
+  from this have h1:"\<forall>x y. s\<turnstile>x\<leadsto>\<^sup>1y \<longrightarrow> s\<turnstile>y"
+  proof-
+    show "\<forall>x y. s\<turnstile>x\<leadsto>\<^sup>1y \<longrightarrow> s\<turnstile>y"
+      apply rule+
+      apply(case_tac "\<exists>r. y = Real r")
+       apply(auto simp add:valid_page_def)
+    proof-
+      fix x y
+      assume a11:"s\<turnstile>x\<leadsto>\<^sup>1y" and a12:"\<forall>r. y \<noteq> Real r"
+      from a11 have h11:"\<exists>sp vpage. x = Virtual sp vpage" using direct_path_def by auto
+      have h12:"s\<turnstile>x" using a11 FatherEqValid by auto
+      have h13:"\<exists>r. s\<turnstile>x\<leadsto>\<^sup>+(Real r)" using h11 h12 a1 rtran_tran by auto
+      then obtain r where o1:"s\<turnstile>x\<leadsto>\<^sup>+(Real r)" by auto
+      from this have h14:"\<exists>z. s\<turnstile>x\<leadsto>\<^sup>1z \<and> s\<turnstile>z \<leadsto>\<^sup>+(Real r)" 
+        using a11 a12 Space_Father_Is_Unique by (meson tran_path.cases)
+      then obtain z where o2:"s\<turnstile>x\<leadsto>\<^sup>1z \<and> s\<turnstile>z \<leadsto>\<^sup>+(Real r)" by auto
+      then have "s\<turnstile>y \<leadsto>\<^sup>+(Real r)" using a11 Space_Father_Is_Unique by auto
+      then have "\<exists>z. s\<turnstile>y \<leadsto>\<^sup>1 z" using tran_path.cases by blast
+      then show "case y of Virtual sp v_page \<Rightarrow> \<exists>p. s\<turnstile>y\<leadsto>\<^sup>1p | Real r \<Rightarrow> True"
+        using FatherIsVirtual page_t.simps(5) by blast
+    qed
+  qed
+  then show ?thesis by simp
+qed
+
+lemma YTranIsValid:"Inv_Space_Valid_Has_Real s \<Longrightarrow>
+ (s \<turnstile> x \<leadsto>\<^sup>+ y) \<Longrightarrow> s \<turnstile> y"
+proof-
+  assume a1:"Inv_Space_Valid_Has_Real s"
+  show "(s \<turnstile> x \<leadsto>\<^sup>+ y) \<Longrightarrow> s \<turnstile> y"
+  proof(induct rule:tran_path.induct)
+    case (one_path x y)
+    then show ?case using a1 YIsValid by simp
+  next
+    case (tran_path x y z)
+    then show ?case by simp
+  qed
+qed
+
+lemma tran_one_unique:"s\<turnstile>x\<leadsto>\<^sup>+y2 \<Longrightarrow> s\<turnstile>x\<leadsto>\<^sup>1y \<Longrightarrow>
+           Inv_Space_Father_Is_Unique s \<Longrightarrow>
+           Inv_Space_HasNot_Loop s \<Longrightarrow> y = Virtual sp v_page1 \<Longrightarrow> y2 = Virtual sp v_page2 \<Longrightarrow> v_page1 = v_page2"
+  apply(induct rule:tran_path.induct)
+  subgoal
+    unfolding Inv_Space_Father_Is_Unique_def
+    by auto
+  unfolding Inv_Space_Father_Is_Unique_def
+  Inv_Space_HasNot_Loop_def
+  by blast
+
+lemma tran_more_unique:"s\<turnstile>x\<leadsto>\<^sup>+y2 \<Longrightarrow>s\<turnstile>x\<leadsto>\<^sup>1y \<Longrightarrow>
+       s\<turnstile>y\<leadsto>\<^sup>+z \<Longrightarrow>
+       (s\<turnstile>y\<leadsto>\<^sup>+y2 \<Longrightarrow>
+        Inv_Space_Father_Is_Unique s \<Longrightarrow>
+        Inv_Space_HasNot_Loop s \<Longrightarrow> z = Virtual sp v_page1 \<Longrightarrow> y2 = Virtual sp v_page2 \<Longrightarrow> v_page1 = v_page2) \<Longrightarrow>
+       Inv_Space_Father_Is_Unique s \<Longrightarrow>
+       Inv_Space_HasNot_Loop s \<Longrightarrow> z = Virtual sp v_page1 \<Longrightarrow> y2 = Virtual sp v_page2 \<Longrightarrow> v_page1 = v_page2"
+  apply(induct rule:tran_path.induct)
+    unfolding Inv_Space_Father_Is_Unique_def
+    Inv_Space_HasNot_Loop_def apply blast
+  by blast
+
+lemma YYIsUnique_Virtual:"(s \<turnstile> x \<leadsto>\<^sup>+ y1) \<Longrightarrow> (s \<turnstile> x \<leadsto>\<^sup>+ y2) \<Longrightarrow>
+Inv_Space_Father_Is_Unique s \<Longrightarrow> Inv_Space_HasNot_Loop s \<Longrightarrow> y1 = Virtual sp v_page1 \<Longrightarrow> y2 = Virtual sp v_page2 \<Longrightarrow>
+ v_page1 = v_page2"
+  apply(induct rule:tran_path.induct)
+  using tran_one_unique apply simp
+  using tran_more_unique by blast
+
+
+lemma tran_one_unique':"
+           s\<turnstile>x\<leadsto>\<^sup>+y2 \<Longrightarrow>s\<turnstile>x\<leadsto>\<^sup>1y \<Longrightarrow>
+           Inv_Space_Father_Is_Unique s \<Longrightarrow> Inv_Space_HasNot_Loop s \<Longrightarrow> y = Real r1 \<Longrightarrow> y2 = Real r2 \<Longrightarrow> r1 = r2"
+  apply(induct rule:tran_path.induct)
+  subgoal
+    unfolding Inv_Space_Father_Is_Unique_def
+    by auto
+  unfolding Inv_Space_Father_Is_Unique_def
+  by (metis SonIsNoReal tran_path.cases)
+
+lemma tran_more_unique':"
+s\<turnstile>x\<leadsto>\<^sup>+y2 \<Longrightarrow>s\<turnstile>x\<leadsto>\<^sup>1y \<Longrightarrow> s\<turnstile>y\<leadsto>\<^sup>+z \<Longrightarrow>
+       (s\<turnstile>y\<leadsto>\<^sup>+y2 \<Longrightarrow>
+        Inv_Space_Father_Is_Unique s \<Longrightarrow> Inv_Space_HasNot_Loop s \<Longrightarrow> z = Real r1 \<Longrightarrow> y2 = Real r2 \<Longrightarrow> r1 = r2) \<Longrightarrow>
+       Inv_Space_Father_Is_Unique s \<Longrightarrow> Inv_Space_HasNot_Loop s \<Longrightarrow> z = Real r1 \<Longrightarrow> y2 = Real r2 \<Longrightarrow> r1 = r2"
+  apply(induct rule:tran_path.induct)
+  subgoal
+    unfolding Inv_Space_Father_Is_Unique_def
+     by (metis SonIsNoReal tran_path.cases)
+   unfolding Inv_Space_Father_Is_Unique_def
+   by metis
+
+lemma YYIsUnique_Real:"(s \<turnstile> x \<leadsto>\<^sup>+ y1) \<Longrightarrow> (s \<turnstile> x \<leadsto>\<^sup>+ y2) \<Longrightarrow>
+Inv_Space_Father_Is_Unique s \<Longrightarrow> Inv_Space_HasNot_Loop s \<Longrightarrow> y1 = Real r1 \<Longrightarrow> y2 = Real r2 \<Longrightarrow>
+ r1 = r2"
+  apply(induct rule:tran_path.induct)
+  using tran_one_unique' apply simp
+  using tran_more_unique' by blast
+
+lemma "Inv_Space_Father_Is_Unique s \<Longrightarrow> Inv_Space_HasNot_Loop s \<Longrightarrow> Inv_Space_Path_Is_Unique s"
+  unfolding Inv_Space_Path_Is_Unique_def
+  using YYIsUnique_Real
+  by auto
+
+definition Inv_Space_Perms_IsNot_Empty::"State \<Rightarrow> bool" where
+"Inv_Space_Perms_IsNot_Empty s \<equiv>
+            (\<forall>sp v_page. s \<turnstile> (Virtual sp v_page) \<longrightarrow> get_perms s sp v_page \<noteq> {})"
+
+definition Inv_Space_Spaces_In_Config::"State \<Rightarrow> bool" where
+"Inv_Space_Spaces_In_Config s \<equiv> (spaces s \<subseteq> Address_Space SysConf)"
+
+definition Inv_Space_InitialSpaces_In_Spaces::"State \<Rightarrow> bool" where
+"Inv_Space_InitialSpaces_In_Spaces s \<equiv> (initialised_spaces s \<subseteq> spaces s)"
+
+definition Inv_Space_Spaces_IsNot_None::"State \<Rightarrow> bool" where
+"Inv_Space_Spaces_IsNot_None s \<equiv>
+    (spaces s = dom (space_threads s))"
+
+definition Inv_NSpace_Is_None::"State \<Rightarrow> bool" where
+"Inv_NSpace_Is_None s \<equiv>
+\<forall>sp. sp \<in> Address_Space SysConf - spaces s \<longrightarrow> space_threads s sp = None"
+
+lemma Inv_NSpace_Is_None':"Inv_Space_Spaces_IsNot_None s \<Longrightarrow> Inv_NSpace_Is_None s \<Longrightarrow>
+\<forall>sp. sp \<in> Address_Space SysConf - spaces s \<longrightarrow> space_mapping s sp = None"
+  unfolding Inv_Space_Spaces_IsNot_None_def Inv_NSpace_Is_None_def
+    spaces_def dom_def by blast
+
+definition Inv_Space_Vpage_Range::"State \<Rightarrow> bool" where
+"Inv_Space_Vpage_Range s \<equiv> \<forall>sp v. s\<turnstile>(Virtual sp v) \<longrightarrow> v \<ge> 0 \<and> v < page_maxnum"
+
+definition Inv_Space_Sigma0Space_Vpage::"State \<Rightarrow> bool" where
+"Inv_Space_Sigma0Space_Vpage s \<equiv> \<forall>v < page_maxnum. s\<turnstile>(Virtual Sigma0Space v) \<leadsto>\<^sup>1 (Real v)"
+
+
+definition Inv_Space::"State \<Rightarrow> bool" where
+"Inv_Space s \<equiv> (Inv_Space_HasNot_Loop s \<and> Inv_Space_Valid_Has_Real s \<and>
+                 Inv_Space_Perms_IsNot_Empty s \<and> Inv_Space_Spaces_In_Config s \<and>
+                 Inv_Space_InitialSpaces_In_Spaces s \<and> Inv_Space_Perms_Subset s \<and>
+                 Inv_Space_Spaces_IsNot_None s \<and> Inv_Space_Vpage_Range s)"
+
+definition Inv_Space_base::"State \<Rightarrow> bool" where
+"Inv_Space_base s \<equiv> (spaces s \<subseteq> Address_Space SysConf) \<and>
+                    (initialised_spaces s \<subseteq> spaces s) \<and>
+                    (\<forall>sp. sp \<in> Address_Space SysConf - spaces s \<longrightarrow>
+                          space_mapping s sp = None \<and>
+                          space_threads s sp = None) \<and>
+                    (\<forall>sp. sp \<in> spaces s \<longrightarrow>
+                          space_mapping s sp \<noteq> None \<and>
+                          space_threads s sp \<noteq> None) \<and>
+                    (\<forall>v. (s \<turnstile> (Virtual Sigma0Space v) \<leadsto>\<^sup>1 (Real v)))"
+
+(*22*)                  
+section\<open>Thread\<close>
+
+definition Inv_Idle_NotIn_Threads::"State \<Rightarrow> bool" where
+"Inv_Idle_NotIn_Threads s \<equiv> (idle \<notin> threads s)"
+
+definition Inv_Idle_Space_Is_KernelSpace::"State \<Rightarrow> bool" where
+"Inv_Idle_Space_Is_KernelSpace s \<equiv> (thread_space s idle = Some KernelSpace)"
+
+definition Inv_Sigma0_In_Active::"State \<Rightarrow> bool" where
+"Inv_Sigma0_In_Active s \<equiv> (kSigma0 \<in> active_threads s)"
+
+definition Inv_Sigma0_Space::"State \<Rightarrow> bool" where
+"Inv_Sigma0_Space s \<equiv> (thread_space s kSigma0 = Some Sigma0Space)"
+
+definition Inv_RootServer_In_Active::"State \<Rightarrow> bool" where
+"Inv_RootServer_In_Active s \<equiv> (kRootServer \<in> active_threads s)"
+
+definition Inv_RootServer_Space::"State \<Rightarrow> bool" where
+"Inv_RootServer_Space s \<equiv> (thread_space s kRootServer = Some RootServerSpace)"
+
+definition Inv_IntThreads_In_Active::"State \<Rightarrow> bool" where
+"Inv_IntThreads_In_Active s \<equiv> (kIntThreads \<subseteq> active_threads s)"
+
+definition Inv_IntThreads_Space::"State \<Rightarrow> bool" where
+"Inv_IntThreads_Space s \<equiv> 
+                 (\<forall>t. t \<in> kIntThreads \<longrightarrow> thread_space s t = Some KernelSpace)"
+
+definition Inv_Threads_In_Config::"State \<Rightarrow> bool" where
+"Inv_Threads_In_Config s \<equiv> (threads s \<subseteq> Threads_Gno SysConf)"
+
+definition Inv_Active_In_Threads::"State \<Rightarrow> bool" where
+"Inv_Active_In_Threads s \<equiv> (active_threads s \<subseteq> threads s)"
+
+definition Inv_NThreads_Is_None::"State \<Rightarrow> bool" where
+"Inv_NThreads_Is_None s \<equiv>
+    (\<forall>t. t \<in> Threads_Gno SysConf - threads s \<longrightarrow>
+          thread_space s t = None \<and> 
+          thread_scheduler s t = None \<and>
+          thread_state s t = None \<and>
+          thread_pager s t = None \<and>
+          thread_handler s t = None \<and>
+          thread_message s t = None \<and>
+          thread_rcvWindow s t = None \<and>
+          thread_error s t = None \<and>
+          thread_priority s t = None \<and>
+          thread_total_quantum s t = None \<and>
+          thread_timeslice_length s t = None \<and>
+          thread_current_timeslice s t = None \<and>
+          thread_ipc_partner s t = None \<and>
+          thread_ipc_timeout s t = None \<and>
+          thread_incoming s t = None)"
+
+
+definition Inv_Threads_IsNot_None::"State \<Rightarrow> bool" where
+"Inv_Threads_IsNot_None s \<equiv>
+   (\<forall>t. t \<in> threads s \<longrightarrow>
+          thread_state s t \<noteq> None \<and>
+          thread_priority s t \<noteq> None \<and>
+          thread_total_quantum s t \<noteq> None \<and>
+          thread_timeslice_length s t \<noteq> None \<and>
+          thread_current_timeslice s t \<noteq> None \<and>
+          thread_ipc_timeout s t \<noteq> None)"
+
+definition Inv_Threads_Space_Dom::"State \<Rightarrow> bool" where
+"Inv_Threads_Space_Dom s \<equiv> threads s = dom (thread_space s) - {idle}"
+
+definition Inv_Threads_Space_In_Spaces::"State \<Rightarrow> bool" where
+"Inv_Threads_Space_In_Spaces s \<equiv>
+          (\<forall>t. t \<in> threads s \<longrightarrow> (\<exists>space. space \<in> spaces s \<and> thread_space s t = Some space))"
+
+definition Inv_Threads_Eq_Space_Threads::"State \<Rightarrow> bool" where
+"Inv_Threads_Eq_Space_Threads s \<equiv>
+\<forall>space. space \<in> spaces s \<longrightarrow> the (space_threads s space) = {t. thread_space s t = Some space}"
+
+
+lemma Thread_Exist:"Inv_Threads_Space_In_Spaces s \<Longrightarrow> Inv_Threads_Space_Dom s \<Longrightarrow> space \<notin> spaces s \<Longrightarrow> 
+\<nexists>t. t \<noteq> idle \<and> thread_space s t = Some space"
+unfolding Inv_Threads_Space_In_Spaces_def Inv_Threads_Space_Dom_def
+by auto
+
+lemma Thread_Exist':"\<And>t. Inv_Threads_Space_In_Spaces s \<Longrightarrow> Inv_Threads_Space_Dom s \<Longrightarrow> space \<notin> spaces s \<Longrightarrow> 
+t \<noteq> idle \<Longrightarrow> thread_space s t = Some space \<Longrightarrow> False"
+unfolding Inv_Threads_Space_In_Spaces_def Inv_Threads_Space_Dom_def
+by auto
+
+lemma Thread_AtLeast_One_In_Space:
+  assumes a1:"Inv_Threads_Space_In_Spaces s"
+      and a2:"Inv_Threads_Eq_Space_Threads s"
+      and a3:"gno \<in> threads s"
+    shows "{gno} \<subseteq> the (space_threads s (the (thread_space s gno)))"
+proof-
+  from a3 obtain space where h1:"space \<in> spaces s \<and> thread_space s gno = Some space" 
+    using a1[unfolded Inv_Threads_Space_In_Spaces_def] by auto
+  then have h12:"the (space_threads s space) = {t. thread_space s t = Some space}"
+    using a2[unfolded Inv_Threads_Eq_Space_Threads_def] by simp
+  then show "{gno} \<subseteq> the (space_threads s (the (thread_space s gno)))"
+    using h1 by simp
+qed
+
+definition Inv_Threads_Sche_In_Threads::"State \<Rightarrow> bool" where
+"Inv_Threads_Sche_In_Threads s \<equiv>
+          (\<forall>t. t \<in> threads s \<longrightarrow> (\<exists>sche. sche \<in> threads s \<and> thread_scheduler s t = Some sche))"
+
+definition Inv_Threads_Partner_In_Threads::"State \<Rightarrow> bool" where
+"Inv_Threads_Partner_In_Threads s \<equiv>
+          (\<forall>t. t \<in> threads s \<longrightarrow> 
+                    (\<exists>partner. (thread_ipc_partner s t = Some partner) \<and> 
+                    (partner \<noteq> NILTHREAD \<and> partner \<noteq> ANYTHREAD \<longrightarrow> 
+                              TidToGno partner \<in> threads s)))"
+
+definition Inv_Threads_Incoming_In_Threads::"State \<Rightarrow> bool" where
+"Inv_Threads_Incoming_In_Threads s \<equiv>
+          (\<forall>t. t \<in> threads s \<longrightarrow> 
+          (\<exists>send_l. (thread_incoming s t = Some send_l) \<and> (\<forall>gno. gno \<in> set (send_l) \<longrightarrow> gno \<in> threads s)))"
+
+definition Inv_NActive_Utcb_Is_None::"State \<Rightarrow> bool" where
+"Inv_NActive_Utcb_Is_None s \<equiv>
+ (\<forall>t. t \<in> threads s \<longrightarrow>
+     (t \<notin> active_threads s \<longrightarrow>
+           thread_pager s t = None \<and>
+           thread_handler s t = None \<and>
+           thread_message s t = None \<and>
+           thread_rcvWindow s t = None \<and>
+           thread_error s t = None))"
+
+definition Inv_Active_Utcb_IsNot_None::"State \<Rightarrow> bool" where
+"Inv_Active_Utcb_IsNot_None s \<equiv>
+ (\<forall>t. t \<in> active_threads s \<longrightarrow>
+     (t \<notin> kIntThreads \<longrightarrow>
+           thread_pager s t \<noteq> None \<and>
+           thread_handler s t \<noteq> None \<and>
+           thread_message s t \<noteq> None \<and>
+           thread_rcvWindow s t \<noteq> None \<and>
+           thread_error s t \<noteq> None))"
+
+definition Inv_IntThreads_Utcb_Is_None::"State \<Rightarrow> bool" where
+"Inv_IntThreads_Utcb_Is_None s \<equiv>
+(\<forall>t. t \<in> active_threads s \<longrightarrow>
+    (t \<in> kIntThreads \<longrightarrow>
+           thread_pager s t = None \<and>
+           thread_handler s t = None \<and>
+           thread_message s t = None \<and>
+           thread_rcvWindow s t = None \<and>
+           thread_error s t = None))"
+
+definition Inv_Thread::"State \<Rightarrow> bool" where
+"Inv_Thread s \<equiv> (Inv_Idle_NotIn_Threads s \<and> Inv_Idle_Space_Is_KernelSpace s \<and>
+    Inv_Sigma0_In_Active s \<and> Inv_Sigma0_Space s \<and> Inv_IntThreads_Space s \<and>
+    Inv_RootServer_In_Active s \<and> Inv_RootServer_Space s \<and> Inv_IntThreads_In_Active s \<and> 
+    Inv_Threads_In_Config s \<and> Inv_Active_In_Threads s \<and> Inv_NThreads_Is_None s \<and> Inv_Threads_Space_Dom s \<and>
+    Inv_Threads_IsNot_None s \<and> Inv_Threads_Space_In_Spaces s \<and> Inv_Threads_Eq_Space_Threads s \<and> 
+    Inv_Threads_Sche_In_Threads s \<and> Inv_NActive_Utcb_Is_None s \<and> Inv_Active_Utcb_IsNot_None s \<and> 
+    Inv_IntThreads_Utcb_Is_None s \<and> Inv_Threads_Partner_In_Threads s \<and> Inv_Threads_Incoming_In_Threads s)"
+
+(*3*)
+section\<open>IPC\<close>
+definition Inv_IPC_Recvfor_Not_NIL::"State \<Rightarrow> bool" where
+"Inv_IPC_Recvfor_Not_NIL s = (\<forall>t. t \<in> threads s \<and> t \<in> dom (thread_recv_for s) \<longrightarrow> the (thread_recv_for s t) \<in> (GetThreadsTids s \<union> {ANYTHREAD}))"
+
+definition Inv_IPC_RecvTime_Not_Zero::"State \<Rightarrow> bool" where
+"Inv_IPC_RecvTime_Not_Zero s = (\<forall>t. t \<in> threads s \<and> t \<in> dom (thread_recv_timeout s) \<longrightarrow> GetTimeout (the (thread_recv_timeout s t)) \<noteq> 0)"
+
+definition Inv_IPC_Recv_Is_None::"State \<Rightarrow> bool" where
+"Inv_IPC_Recv_Is_None s = (\<forall>t. t \<notin> threads s \<longrightarrow> thread_recv_for s t = None \<and> thread_recv_timeout s t = None)"
+
+definition Inv_IPC::"State \<Rightarrow> bool" where
+"Inv_IPC s \<equiv>  Inv_IPC_Recvfor_Not_NIL s \<and> Inv_IPC_RecvTime_Not_Zero s \<and> Inv_IPC_Recv_Is_None s"
+
+(*2*)
+section\<open>Schedule\<close>
+definition Inv_Schedule_Wait_In_active::"State \<Rightarrow> bool" where
+"Inv_Schedule_Wait_In_active s \<equiv> set (wait_queuing s) \<subseteq> active_threads s" 
+
+definition Inv_Schedule_Ready_In_active::"State \<Rightarrow> bool" where
+"Inv_Schedule_Ready_In_active s \<equiv>(\<forall>i. set(ready_queuing s i) \<subseteq> active_threads s)"
+
+definition Inv_Schedule::"State \<Rightarrow> bool" where
+"Inv_Schedule s \<equiv> Inv_Schedule_Wait_In_active s \<and> Inv_Schedule_Ready_In_active s"
+
+section\<open>Invariant\<close>
+definition Invariants::"State \<Rightarrow> bool" where
+"Invariants s \<equiv> Inv_Current s \<and> Inv_Space s \<and> Inv_Thread s \<and> Inv_Schedule s \<and> Inv_IPC s" 
+end

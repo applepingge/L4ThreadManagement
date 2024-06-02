@@ -1,0 +1,138 @@
+theory L4_Init
+imports L4_Syscall
+begin
+definition System_Init::"Sys_Config \<Rightarrow> State" where
+"System_Init SysConf = 
+\<lparr>current_thread = idle,
+ current_time = 0,
+
+ threads = {kSigma0, kRootServer} \<union> kIntThreads,
+ active_threads = {kSigma0, kRootServer} \<union> kIntThreads,
+ thread_space = (\<lambda>t. (if t \<in> kIntThreads
+                        then Some KernelSpace
+                        else 
+                      if t = kSigma0
+                        then Some Sigma0Space
+                        else
+                      if t = kRootServer
+                        then Some RootServerSpace
+                        else
+                      if t = idle
+                        then Some KernelSpace
+                        else None 
+                     )
+                ),
+ thread_scheduler = (\<lambda>t. if t = kSigma0 \<or> t = kRootServer
+                           then Some kRootServer
+                           else
+                          if t \<in> kIntThreads
+                            then Some t
+                            else None),
+ thread_state = (\<lambda>t. (if t \<in> kIntThreads
+                        then Some tsAborted
+                        else
+                      if t = kSigma0 \<or> t = kRootServer
+                        then Some tsRunning
+                        else None)),
+
+ thread_pager = (\<lambda>t. (if t \<in> kIntThreads
+                        then None
+                        else
+                      if t = kRootServer
+                        then Some (Global kSigma0)
+                        else 
+                       if t = kSigma0
+                         then Some NILTHREAD
+                         else None)),
+
+ thread_handler = (\<lambda>t. (if t \<in> kIntThreads
+                        then None
+                        else
+                      if t = kRootServer \<or> t = kSigma0
+                        then Some NILTHREAD
+                        else None)),
+
+ thread_message = (\<lambda>t. (if t = kRootServer \<or> t = kSigma0
+                        then Some (UNTYPED 0)
+                        else None)),
+ thread_rcvWindow = (\<lambda>t. (if t = kRootServer \<or> t = kSigma0
+                        then Some (0,0,{})
+                        else None)),
+ thread_error = (\<lambda>t. (if t = kSigma0 \<or> t = kRootServer
+                      then Some eNoError
+                      else None)),
+
+ thread_priority = (\<lambda>t. (if t \<in> kIntThreads \<or> t = kSigma0 \<or> t = kRootServer
+                            then Some MAX_PRIO
+                            else
+                          if t = idle
+                            then Some 0
+                            else None)),
+ thread_total_quantum = (\<lambda>t. (if t \<in> kIntThreads \<or> t = kSigma0 \<or> t = kRootServer
+                            then Some DEFAULT_TOTAL_QUANTUM
+                            else None)),
+ thread_timeslice_length = (\<lambda>t. (if t \<in> kIntThreads \<or> t = kSigma0 \<or> t = kRootServer
+                            then Some DEFAULT_TIMESLICE_LENGTH
+                            else None)),
+ thread_current_timeslice = (\<lambda>t. (if t = kSigma0 \<or> t = kRootServer
+                                   then Some DEFAULT_TIMESLICE_LENGTH
+                                   else
+                                  if t \<in> kIntThreads
+                                    then Some DEFAULT_TIMESLICE_LENGTH
+                                    else None)),
+
+ wait_queuing = [],
+ ready_queuing = (\<lambda>p. [])(0:=[kSigma0, kRootServer]),
+ current_timeslice = 0,
+
+ initialised_spaces = {Sigma0Space, RootServerSpace, KernelSpace},
+ space_threads = (\<lambda>sp. (if sp = KernelSpace
+                          then Some (kIntThreads \<union> {idle})
+                          else 
+                        if sp = Sigma0Space
+                          then Some {kSigma0}
+                          else
+                        if sp = RootServerSpace
+                          then Some {kRootServer}
+                          else None)),
+ space_mapping = (\<lambda>sp. (if sp = KernelSpace
+                          then Some (\<lambda>v. None)
+                          else
+                        if sp = Sigma0Space
+                          then Some (\<lambda>v. if v < page_maxnum 
+                                         then Some (Real v, UNIV)
+                                         else None)
+                          else
+                        if sp = RootServerSpace
+                          then Some (\<lambda>v. None)
+                          else None)),
+
+ thread_ipc_partner = (\<lambda>t. (if t \<in> kIntThreads
+                              then Some NILTHREAD
+                              else 
+                            if t = kSigma0
+                              then Some NILTHREAD
+                              else
+                            if t = kRootServer
+                              then Some NILTHREAD
+                              else None)),
+ thread_ipc_timeout = (\<lambda>t. (if t \<in> kIntThreads
+                              then Some (eInfiniteTimeout)
+                              else 
+                            if t = kSigma0
+                              then Some eInfiniteTimeout
+                              else
+                            if t = kRootServer
+                              then Some eInfiniteTimeout
+                              else None)),
+ thread_incoming = (\<lambda>t. (if t = kSigma0
+                              then Some []
+                              else
+                            if t = kRootServer
+                              then Some []
+                              else
+                            if t \<in> kIntThreads
+                              then Some []
+                              else None))
+\<rparr>"
+end

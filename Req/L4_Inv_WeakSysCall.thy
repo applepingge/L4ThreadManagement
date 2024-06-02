@@ -1,0 +1,235 @@
+theory L4_Inv_WeakSysCall
+  imports L4_Inv_s0 L4_Inv_Space L4_Inv_Thread
+begin
+section\<open>WeakCreateThread\<close>
+thm WeakCreateThread_def
+lemma WeakCreateThread_Inv:
+  assumes p1:"Invariants s"
+  shows "Invariants (WeakCreateThread SysConf s destNo spaceSpecifier schedNo pagerNo)"
+  unfolding WeakCreateThread_def Let_def
+  using CreateActiveThread_Inv CreateThread_Inv p1
+  by simp
+
+section\<open>WeakModifyThread\<close>
+lemma WeakModifyThread_Inv:
+  assumes p1:"Invariants s"
+  shows "Invariants (WeakModifyThread SysConf s destNo spaceSpecifier schedNo pagerNo)"
+  unfolding WeakModifyThread_def Let_def
+  using Migrate_Inv SetScheduler_Inv ActivateThread_Inv SetPager_Inv p1 
+  by simp
+
+section\<open>WeakDeleteThread\<close>
+lemma WeakDeleteThread_Inv:
+  assumes p1:"Invariants s"
+  shows "Invariants (WeakDeleteThread SysConf s gno)"
+  unfolding WeakDeleteThread_def
+  apply(rule elim_if)
+   apply (simp add: DeleteThread_Inv p1)
+  by (simp add: p1)
+
+section\<open>IntThreadControl\<close>
+lemma IntThreadControl_Inv:
+  assumes p1:"Invariants s"
+  shows "Invariants (IntThreadControl SysConf s destNo handlerNo)"
+  unfolding IntThreadControl_def
+  using DeactivateInterrupt_Inv ActivateInterrupt_Inv p1
+  by simp
+
+section\<open>WeakExchangeRegister\<close>
+lemma in_threads_if_rule:"\<And>s s1 s2 a g. g \<in> threads s1 \<Longrightarrow>  g \<in> threads s2 \<Longrightarrow> g \<in> threads(if a then s1 else s2)"
+  by presburger
+lemma threads_if_rule:"\<And>s s1 s2 a. threads s1 \<equiv> threads s \<Longrightarrow>  threads s2 \<equiv> threads s \<Longrightarrow> threads(if a then s1 else s2) \<equiv> threads s "
+  by presburger
+lemma active_threads_if_rule:"\<And>s s1 s2 a. active_threads s1 \<equiv> active_threads s \<Longrightarrow>  active_threads s2 \<equiv> active_threads s \<Longrightarrow> active_threads(if a then s1 else s2) \<equiv> active_threads s "
+  by presburger
+lemma Invariants_if_rule:"\<And>s s1 s2 a. Invariants s1 \<Longrightarrow>  Invariants s2 \<Longrightarrow> Invariants(if a then s1 else s2)"
+  by presburger
+
+(*
+lemma Weak_Exregs_Inv:
+  assumes p1:"Invariants s"
+  shows "Invariants (Weak_Exregs SysConf s gno control pager)"
+  sorry
+  unfolding Weak_Exregs_def Let_def
+  apply(rule elim_if)
+  subgoal
+    apply(rule elim_if)
+    subgoal
+      apply(rule elim_if)
+       apply(subst SetThreadState_Inv)
+         apply(rule elim_if_and_pre)
+           apply(subgoal_tac "\<And>s gno. threads(enqueue_ready s gno) \<equiv> threads s ")
+           apply(subgoal_tac "\<And>s gno. threads(Unwind s gno) \<equiv> threads s ")
+             apply(simp add:GetThreadState_def SetThreadPager_def SetThreadState_def)
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp
+             apply (simp add: subset_iff)
+            apply(simp add:Unwind_def)
+           apply(subgoal_tac "\<And>s gno. threads(dequeue_wait s gno) \<equiv> threads s ")
+             apply(subgoal_tac "\<And>s p gno. threads(SetThreadsIncomingDel s p gno) \<equiv> threads s ")
+              apply smt
+             apply(simp add:SetThreadsIncomingDel_def)
+            apply(simp add:dequeue_wait_def)
+           apply(simp add:enqueue_ready_def Let_def)
+           apply(rule threads_if_rule)
+           apply simp+
+         apply(simp add:SetThreadPager_def)
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp 
+         apply (simp add: subset_iff)
+         apply(rule elim_if_and_pre)
+         apply(subst enqueue_ready_Inv)
+          apply(simp add:SetThreadState_def)
+          apply(subgoal_tac "\<And>s gno. active_threads(Unwind s gno) \<equiv> active_threads s ")
+           apply simp
+           apply(simp add:SetThreadPager_def)
+          apply(unfold Unwind_def Let_def)
+          apply(rule active_threads_if_rule)+
+            apply(simp add:SetThreadsIncomingDel_def)
+            apply(unfold dequeue_wait_def)
+            apply simp
+           apply(rule active_threads_if_rule)
+            apply simp
+           apply simp
+          apply simp
+         apply(subst SetThreadState_Inv)
+      apply(simp add:SetThreadsIncomingDel_def SetThreadPager_def)
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp 
+          apply (simp add: subset_iff)
+         apply(rule elim_if_and_pre)
+          apply(rule elim_if)
+           apply(subst SetThreadsIncomingDel_Inv)
+            apply(unfold SetThreadPager_def GetIpcPartner_def)
+            apply(case_tac "ex_p \<in> control")
+             apply simp
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def Inv_Threads_Partner_In_Threads_def subset_iff apply simp
+             apply auto[1]
+            apply simp
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def Inv_Threads_Partner_In_Threads_def subset_iff apply simp
+            apply auto[1]
+      using SetThreadPager_Inv Invariants_def Inv_Thread_def Inv_Active_In_Threads_def SetThreadPager_def dequeue_wait_Inv dequeue_wait_def p1
+           apply auto[1]
+          apply simp
+      using SetThreadPager_Inv SetThreadPager_def dequeue_wait_Inv dequeue_wait_def p1 apply auto[1]
+      using SetThreadPager_Inv SetThreadPager_def p1 apply auto[1]
+       apply simp
+      apply(subst SetThreadState_Inv)
+         apply(rule elim_if_and_pre)
+         apply(subgoal_tac "\<And>s gno. threads(enqueue_ready s gno) \<equiv> threads s ")
+             apply(simp add:GetThreadState_def SetThreadPager_def SetThreadState_def SetThreadsIncomingDel_def)
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp
+             apply (simp add: subset_iff)
+         apply(simp add:enqueue_ready_def Let_def)
+         apply(rule threads_if_rule)
+          apply simp+
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp 
+        apply (simp add: subset_iff)
+       apply(rule elim_if_and_pre)
+        apply(subst enqueue_ready_Inv)
+         apply(simp add:GetThreadState_def SetThreadPager_def SetThreadState_def SetThreadsIncomingDel_def)
+        apply(subst SetThreadState_Inv)
+         apply(simp add:GetThreadState_def SetThreadPager_def SetThreadState_def SetThreadsIncomingDel_def)
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp
+         apply (simp add: subset_iff)
+        apply(rule elim_if_and_pre)
+         apply(rule elim_if)
+        apply(subst SetThreadsIncomingDel_Inv)
+           apply(case_tac "ex_p \<in> control")
+            apply simp
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def Inv_Threads_Partner_In_Threads_def subset_iff apply simp
+            apply auto[1]
+           apply simp
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def Inv_Threads_Partner_In_Threads_def subset_iff apply simp
+           apply auto[1]
+      using SetThreadPager_Inv SetThreadPager_def dequeue_wait_Inv dequeue_wait_def p1 apply auto[1]
+         apply simp
+      using SetThreadPager_Inv SetThreadPager_def dequeue_wait_Inv dequeue_wait_def p1 apply auto[1]
+      using SetThreadPager_Inv SetThreadPager_def p1 apply auto[1]
+      by simp
+    apply(rule elim_if_and_pre)
+     apply(subst enqueue_ready_Inv)
+       apply(simp add:SetThreadState_def)
+       apply(subgoal_tac "\<And>s gno. active_threads(Unwind s gno) \<equiv> active_threads s ")
+        apply simp
+        apply(simp add:SetThreadPager_def)
+       apply(unfold Unwind_def Let_def)
+       apply(rule active_threads_if_rule)+
+         apply(simp add:SetThreadsIncomingDel_def)
+         apply(unfold dequeue_wait_def)
+         apply simp
+        apply(rule active_threads_if_rule)
+         apply simp
+        apply simp
+       apply simp
+      apply(subst SetThreadState_Inv)
+       apply(simp add:SetThreadsIncomingDel_def SetThreadPager_def)
+    using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def apply simp
+       apply (simp add: subset_iff)
+      apply(rule elim_if_and_pre)
+       apply(rule elim_if)
+        apply(subst SetThreadsIncomingDel_Inv)
+         apply(unfold SetThreadPager_def GetIpcPartner_def)
+         apply(case_tac "ex_p \<in> control")
+          apply simp
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def Inv_Threads_Partner_In_Threads_def subset_iff apply simp
+            apply auto[1]
+           apply simp
+      using p1 Invariants_def Inv_Thread_def Inv_Active_In_Threads_def Inv_Threads_Partner_In_Threads_def subset_iff apply simp
+           apply auto[1]
+      using SetThreadPager_Inv SetThreadPager_def dequeue_wait_Inv dequeue_wait_def p1 apply auto[1]
+         apply simp
+      using SetThreadPager_Inv SetThreadPager_def dequeue_wait_Inv dequeue_wait_def p1 apply auto[1]
+      using SetThreadPager_Inv SetThreadPager_def p1 apply auto[1]
+      apply simp
+      done
+*)
+(*
+section\<open>do_schedule\<close>
+lemma do_schedule_Inv:
+  assumes p1:"Invariants s"
+      and p2:"destNo \<in> active_threads s"
+  shows "Invariants (do_schedule s destNo timeControl prio)"
+  unfolding do_schedule_def Let_def
+  apply(rule elim_if)
+  subgoal
+    apply(rule SetThreadTimeslice_Inv)
+    subgoal
+      apply(rule SetThreadQuantum_Inv)
+      subgoal
+        apply(rule elim_if)
+        subgoal
+          apply(subst enqueue_ready_Inv)
+          subgoal
+            unfolding SetThreadPriority_def dequeue_ready_def
+            using p2 by auto
+          subgoal
+            apply(rule SetThreadPriority_Inv)
+            subgoal
+              using dequeue_ready_Inv p1 by auto
+            unfolding dequeue_ready_def
+            using p2 p1[unfolded Invariants_def Inv_Thread_def Inv_Active_In_Threads_def] 
+            by auto
+          by simp
+        using p1 by simp
+      unfolding enqueue_ready_def dequeue_ready_def SetThreadPriority_def Let_def
+      using p2 p1[unfolded Invariants_def Inv_Thread_def Inv_Active_In_Threads_def]
+      by auto
+    unfolding SetThreadQuantum_def enqueue_ready_def
+      SetThreadPriority_def dequeue_ready_def Let_def
+    using p2 p1[unfolded Invariants_def Inv_Thread_def Inv_Active_In_Threads_def] 
+    by auto
+  apply(rule elim_if)
+  subgoal
+    apply(subst enqueue_ready_Inv)
+    subgoal
+      unfolding SetThreadPriority_def dequeue_ready_def
+      using p2 by auto
+    subgoal
+      apply(rule SetThreadPriority_Inv)
+      subgoal
+        using dequeue_ready_Inv p1 by auto
+      unfolding dequeue_ready_def
+      using p2 p1[unfolded Invariants_def Inv_Thread_def Inv_Active_In_Threads_def] 
+      by auto
+    by simp
+  using p1 by simp
+*)
+end

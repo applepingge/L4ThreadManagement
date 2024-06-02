@@ -1,0 +1,31 @@
+theory L4_Instantiation_Proof
+  imports L4_Inv_Proof
+begin
+
+interpretation M_abs Reachable step s0_req SysConf Address_Space Threads_Gno idle kSigma0 kRootServer 
+  ANYTHREAD NILTHREAD kIntThreads Sigma0Space RootServerSpace KernelSpace spaces threads active_threads 
+  thread_space thread_scheduler thread_pager thread_state CreateThread CreateActiveThread ActivateThread 
+  DeleteThread SetPager SetScheduler SetState ActivateInterrupt DeactivateInterrupt
+  unfolding M_abs_def apply auto 
+  subgoal using Reachable_def run.simps(1) by blast 
+  subgoal using Reach_step by simp 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Threads_In_Config_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Space_def Inv_Space_Spaces_In_Config_def by auto
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Sigma0_In_Active_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_RootServer_In_Active_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_IntThreads_In_Active_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Active_In_Threads_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Idle_Space_Is_KernelSpace_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Sigma0_Space_def by auto
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_RootServer_Space_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_IntThreads_Space_def by auto
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Threads_Sche_In_Threads_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Threads_Space_In_Spaces_def by auto
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_NThreads_Is_None_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_NThreads_Is_None_def by auto
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_NThreads_Is_None_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_NActive_Utcb_Is_None_def by auto
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_Active_Utcb_IsNot_None_def by auto 
+  subgoal using Reach_Inv Invariants_def Inv_Thread_def Inv_IntThreads_Utcb_Is_None_def by auto 
+  done
+end
